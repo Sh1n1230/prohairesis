@@ -72,7 +72,9 @@ func (s *Store) cmd() gitx.Cmd { return gitx.Cmd{GitDir: s.Path} }
 // are the snapshot substrate's responsibility, not this layer's.
 func (s *Store) writeTree(tag string) (string, error) {
 	idx := filepath.Join(s.Path, "prohairesis-index."+tag)
-	defer os.Remove(idx)
+	// The throwaway index is disposable: a failure to clean it up is not
+	// actionable, and writeTree removes any stale one before it starts.
+	defer func() { _ = os.Remove(idx) }()
 	if err := os.Remove(idx); err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
@@ -312,7 +314,10 @@ func (s *Store) Restore(commit string) error {
 	}
 
 	idx := filepath.Join(s.Path, "prohairesis-index.restore")
-	defer os.Remove(idx)
+	// The throwaway index is disposable, and it lives in the store rather than
+	// in the user's repository, so failing to clean it up is untidy at worst.
+	// read-tree overwrites it wholesale on the next restore.
+	defer func() { _ = os.Remove(idx) }()
 	c := gitx.Cmd{GitDir: s.Path, WorkTree: s.RepoRoot, IndexFile: idx, Dir: s.RepoRoot}
 	if err := c.Run("read-tree", commit); err != nil {
 		return fmt.Errorf("load checkpoint tree: %w", err)
