@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Sh1n1230/prohairesis/schema/harness.loss.v1.json",
+  "title": "harness.loss.v1",
+  "description": "A record that an observation could not be written. It lives outside the session directory on purpose: the most likely reason an event log cannot be written is that the session directory is gone or unwritable, and a sibling file would fail for the same reason. It carries no part of the lost event -- reason, time and count only -- so that it cannot become a second event log holding what the first one deliberately refuses to hold.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ts", "reason"],
+  "properties": {
+    "schema": { "const": "harness.loss.v1" },
+    "ts": { "type": "string", "format": "date-time" },
+    "session_id": { "type": "string" },
+    "reason": {
+      "type": "string",
+      "description": "Error class, not the event. For example \"open events.jsonl: permission denied\"."
+    },
+    "stage": {
+      "enum": ["events", "loss"],
+      "description": "Which write failed. \"loss\" means even this file could not be written and the record reached stderr only."
+    },
+    "count": { "type": "integer", "minimum": 1 }
+  }
+}

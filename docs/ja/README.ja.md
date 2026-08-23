@@ -21,11 +21,21 @@
 
 ## ステータス
 
-**現時点で動作するもの:** セッション、チェックポイント、`diff`、`undo`、`doctor`。エージェントランタイム自体の巻き戻し機能ではカバーできない領域（シェル経由で編集されたファイルや、gitでは無視されているが失うわけにはいかないファイル）をカバーします。ただし現段階でのチェックポイント取得は**手動**です（`prohairesis checkpoint` を自分で実行するか、セッションの開始時と終了時に取得されます）。
+**現時点で動作するもの:** セッション、チェックポイント、`diff`、`undo`、`doctor`。そして hook を登録すれば、**自動チェックポイントと、エージェントが何をしたかの append-only な記録**。エージェントランタイム自体の巻き戻し機能ではカバーできない領域（シェル経由で編集されたファイルや、gitでは無視されているが失うわけにはいかないファイル）をカバーします。
 
-**未実装:** エージェントの hook による自動チェックポイント、イベント台帳（event ledger）、検証契約（verification contract）、メタ状態レイヤー（meta-state layer）、ポリシーコンパイラ（policy compiler）、マシン上限（machine ceiling）。これらはこの順で以降のフェーズに入ります。
+hook の登録は独立した明示的な手順であり、まずは1つのリポジトリでの試用から始まります:
 
-つまり現段階の prohairesis は、**自分で操作する復旧・診断ツール**です。まだバックグラウンドであなたの代わりに動作するものではありません。
+```sh
+prohairesis hooks install                  # このリポジトリだけ
+prohairesis hooks install --scope user     # 常用すると決めたら、マシン全体へ
+prohairesis hooks uninstall                # 元の設定ファイルにバイト一致で戻す
+```
+
+ここで登録されるものは tool call を拒否できません。すべての hook は、失敗した経路も含めて、あらゆる場合に exit 0 で終わります —— これは意図ではなく `tests/scenarios/p2-hook-never-blocks.sh` で表明されています。
+
+**未実装:** 検証契約（verification contract）、メタ状態レイヤー（meta-state layer）、ポリシーコンパイラ（policy compiler）、マシン上限（machine ceiling）。これらはこの順で以降のフェーズに入ります。
+
+つまり現段階の prohairesis は、**作業を復旧可能に保ち、何が起きたかを記録する**ものです。何も判断しませんし、何も止められません。
 
 ## なぜ可逆性を最優先にするのか
 
@@ -54,6 +64,8 @@ cd prohairesis/main && go build -o bin/prohairesis ./cmd/prohairesis
 
 ```sh
 prohairesis doctor             # 実際に何が有効で、何が有効でないかを報告
+prohairesis hooks install      # このリポジトリのセッションを記録し、
+                               # 頼まなくてもチェックポイントを取る
 prohairesis session start      # セッションを開始し、現在のツリーの状態をキャプチャ
 prohairesis protect add data   # 失うわけにはいかないgit無視パスを保護対象として宣言
 prohairesis checkpoint --label "リファクタ前"
@@ -61,7 +73,12 @@ prohairesis diff               # 前回のチェックポイント以降の変�
 prohairesis undo --dry-run     # 復元で何が行われるかを確認（ドライラン）
 prohairesis undo               # ツリーをチェックポイントの状態に復元
 prohairesis session end        # セッションを終了
+
+prohairesis report             # 1つのセッションで何が起きたか
+prohairesis metrics            # 導入前のベースラインに対する現在の摩擦
 ```
+
+手動で開始したセッションは、あなたが終了するまで開いたままです。エージェントの再起動は、あなたが戻れるようにしておきたかった地点を捨てる理由になりません。hook が自分のために開いたセッションは、それを使っていた最後のエージェントが去ったときに閉じます。
 
 終了コードは全体で統一されています: `0` 正常（clean）、`1` ゲート失敗（gate failed）、`2` エラー（error）。
 
@@ -70,6 +87,8 @@ prohairesis session end        # セッションを終了
 prohairesis がアクティブな状態であっても、`git log --all`、`git status`、`git stash list`、`git branch -a`、reflog、`HEAD`、`for-each-ref` は、prohairesis が一度も触れていないリポジトリと**バイト単位で同一（byte-identical）**の出力を生成しなければなりません。`.git` 内には何も書き込まれません。ユーザーのインデックス（index/staging）は決して読み取られず、書き込まれることもありません。
 
 gitの状態を乱してしまうような可逆性レイヤーは、提供するエージェンシーよりも多くのエージェンシーを奪ってしまいます。これは単なる意図ではなく、`tests/scenarios/p1-destroy-and-restore.sh` で厳密に検証（assert）されています。最初の設計案（`refs/harness/` 配下にチェックポイントのrefを置く方式）は、このテストに合格しなかったため却下されました。詳細は [`0001-checkpoint-store-location.ja.md`](0001-checkpoint-store-location.ja.md)（または [`0001-checkpoint-store-location.md`](../adr/0001-checkpoint-store-location.md)）を参照してください。
+
+event log が何を保持し、何を拒むか、そして設計文書にあった唯一の性能数値をなぜ調整ではなく削除したかは [`0002-what-the-event-log-keeps.ja.md`](0002-what-the-event-log-keeps.ja.md)（または [`0002-what-the-event-log-keeps.md`](../adr/0002-what-the-event-log-keeps.md)）にあります。
 
 ## 行わないこと
 
@@ -88,6 +107,8 @@ bash tests/run.sh
 ```bash
 tools/baseline.sh > baseline.json
 ```
+
+hook が記録を始めた後は、`prohairesis metrics` が同じ指標を再計算し、そのベースラインと並べて表示します。両側とも同一のコードから出しており、まだ測れない指標は 0 ではなく理由付きの `n/a` として示されます。各指標が何を支持でき、何を支持できないかは [`docs/ja/METRICS.ja.md`](METRICS.ja.md) にまとめてあります。
 
 開発マシンでの最初の実行では、手書きの正規表現による拒否リスト（denylist）フックが14個のコマンドを拒否したものの、**そのうち13個は害のないもの（偽陽性率 93%）**であることが判明しました。それは、シークレットファイルを ignore し始めるための `.gitignore` への追記をブロックし、そのファイルが追跡されていないことを確認する `git status` をブロックし、フック自身のソースを読む操作をブロックしていました。これらのコマンドはサニタイズされた上で、回帰コーパスとして `tests/golden/false-block-corpus.jsonl` に固定されています。本プロジェクトが提供するいかなるポリシーも、これより優れた結果を出し、かつそれを証明しなければなりません。
 

@@ -3,7 +3,11 @@
 > 承認済みの判断が後の検証で覆った箇所には、それを置き換えた ADR へのリンクを併記しています。
 > 設計判断を変更する場合は、この文書を黙って書き換えるのではなく `docs/adr/` に ADR を追加してください。
 >
-> **実装進捗**: P0（baseline 計測・正直さの文書化）と P1（可逆性基盤）は完了。P2 以降は未着手。
+> **実装進捗**: P0（baseline 計測・正直さの文書化）、P1（可逆性基盤）、P2（観測 + 計測）は完了。P3 以降は未着手。
+> P2 の実装で本文の記述を 4 点上書きしています（`argv` の削除 / 時間予算の撤回 /
+> `boundary_class`・`decision` の v1 除外 / hook 登録の scope）。理由は
+> [ADR 0002](adr/0002-what-the-event-log-keeps.md)（[日本語版](ja/0002-what-the-event-log-keeps.ja.md)）にあり、
+> 以下の該当箇所はそれに合わせて更新済みです。
 > **製品名**: 本文中の「harness」は原則として*カテゴリを指す普通名詞*です。実装の名前は **prohairesis**、
 > 状態ディレクトリは `~/.prohairesis`、スキーマ名前空間は移植可能な契約として `harness.*` を維持します。
 
@@ -229,6 +233,13 @@ contained-reversible は全 action の9割以上を占め、**現在の permissi
 - **L6**: gate を持ってはいけない。exit code と構造化 JSON を返すだけ。「正しさ」の定義を持ってはいけない（repo が既に宣言しているものを発見して走らせる）。
 - **L7**: **モデル・推論・要約・学習を一切持ってはいけない。** L7 は storage + 機械的導出 + 取得のみ。LLM 呼び出しゼロ、埋め込みゼロ、heuristic な「理解」ゼロ。**戦略・仮説・次の一手を持ってはいけない** —— 事実と、既に存在する recovery 選択肢の列挙だけ。`"you should try X"` を1行でも出力したら micromanagement に転落している。Agent が宣言した confidence を真として扱ってはいけないし、それで gate してはいけない。**semantic な project 知識（CLAUDE.md の領分）を持ってはいけない。**
 
+**この一覧の一般形（YAGNI / KISS / DRY）**: 上の各項は「まだ来ていないものを作らない」
+「手渡す表面を小さく保つ」「1 つの事実に 1 つの住所」を、層の語彙で個別に述べたものである。
+一般形としての 3 原則は**このリポジトリの開発と、このリポジトリが agent に手渡す環境の両方**に
+適用する（`CONTRIBUTING.md`）。後半が重要で、小さく綺麗なツールを書きながら、その先の誰かに
+大きく複雑なものを差し出すことは容易に起こる。ただし原則は「似て見えるだけのもの」を畳んでよい
+免罪符ではない。原則と理由が逆を向いたときは、その理由を ADR に書く。
+
 **正準 action model**（provider 非依存性の実体）:
 ```
 Action = { kind: read|write|delete|exec|network|agent_config,
@@ -342,7 +353,7 @@ next_experiment:
 
 ユーザー指定は「session 単位」。ただし **context compaction は session 内で起きる**し、**task は session を跨ぐ**。両方に効かせるため:
 
-- meta-state の物理単位は **session**（`~/.harness/sessions/<id>/state.json`）
+- meta-state の物理単位は **session**（`~/.prohairesis/sessions/<id>/state.json`）
 - 各 session は `parent_session` と `task_id` の lineage を持つ
 - 同一 repo で新 session が始まると、直前 session の `goal` / `rejected` / `known_unknowns` / `last_green` を **carry-over 候補として提示**する（自動 merge はしない。Agent が引き継ぐか捨てるかを決める＝agency）
 - compaction は session 内の出来事なので、state はそのまま生き残る —— **これが本層の最大の実用価値**
@@ -480,8 +491,8 @@ recurrence 検出  →  signal 発火  →  次 attempt で strategy revision �
 ### 10.3 リポジトリ構成
 
 ```
-/Users/shin1230/Git/harness/
-  install / uninstall              # POSIX sh。冪等・--dry-run
+prohairesis/
+  install.sh              # POSIX sh。冪等・--dry-run
   cmd/harness/                     # 単一 Go バイナリ
   internal/
     action/        # 正準 action model（provider 非依存の語彙）
@@ -513,7 +524,7 @@ recurrence 検出  →  signal 発火  →  次 attempt で strategy revision �
 
 install 後のマシン状態:
 ```
-~/.harness/
+~/.prohairesis/
   config.json                # 版, adapter grade, 天井 hash
   policy/compiled/           # content-hash 付き成果物
   trust.json                 # repo TOFU pin
@@ -561,8 +572,15 @@ exit code は security-checker から直接踏襲: `0`=clean / `1`=gate failed /
 
 ### 10.5 スキーマ（要点）
 
-- **`harness.event.v1`** — `{ts, session_id, seq, actor, action{kind,paths,argv,host}, boundary_class, decision{outcome, enforcement, reason}, checkpoint_ref, duration_ms}`。
-  `enforcement: kernel | advisory | record-only` —— **このフィールドが §12 の正直さを文書ではなく構造にする。**
+- **`harness.event.v1`** — `{ts, seq, session_id, repo_key, type, actor{adapter,agent_session_id,grade}, action{kind,tool,command,argv_sha256,paths,host}, outcome{status,duration_ms}, hook_ms, checkpoint_ref{seq,commit,taken_here}, truncated}`。
+  実体は `schema/harness.event.v1.json`。当初案から 2 点変更（[ADR 0002](adr/0002-what-the-event-log-keeps.md)）:
+  **(1) `argv` は保持しない** —— プログラム名と全文の SHA-256 のみ。指標が問うのは同一性だけであり、
+  本文を持てば event log が秘密の集積地になる。redaction は却下（`block-secrets.sh` と同じゲームを、
+  取りこぼしが沈黙する側で再演することになる）。
+  **(2) `boundary_class` と `decision` は v1 に存在しない** —— P5 まで分類も enforcement も存在せず、
+  常に空のフィールドは「埋めよ」という招待状として働く。schema はバージョン付きなので v2 で足せばよい。
+  `kind` は `read|write|delete|exec|network|agent_config|opaque`。**`opaque` は正式な答え**であり、
+  写像できない tool を `exec` に丸めることは coverage の錯覚を作る。
 - **`harness.verify.v1`** — **security-checker の正規化出力と同一形状**: `{category, skipped, findings:[{severity,message,location}]}` → `{total_score, rank, categories[]}`。`~/security-checker/lib/score.sh` が改修ゼロで verification カテゴリになり、Agent が覚える出力形状は1つで済む。**failure fingerprint もこの正規化形状から作る**（生 stderr からではない）。
 - **`harness.state.v1`** — `{derived:{attempts[], elapsed, last_green, recurrence[]}, declared:{goal, current_hypothesis, confidence, rejected[{hypothesis,reason,evidence,at}], known_unknowns[], next_experiment}, lineage:{parent_session, task_id}}`。**`derived` は Agent から書き込み不可（B4）。**
 - **`harness.topology.v1`** — `{repos[], branches[], dirs_touched[], processes[], ports[], deps[], endpoints[], changed_resources[]}`。すべて観測由来。読むたび再計算。
@@ -585,7 +603,8 @@ $ ./install
     ! sandbox 未設定。2.1.241 は native sandbox を持っています。
 
   変更予定:
-    [user] ~/.harness/ 作成 / ~/.claude/settings.json に harness ブロック追加(backup 付)
+    [user] ~/.prohairesis/ 作成 / hook 登録は install ではなく `prohairesis hooks install`
+           （既定は project scope の試用。install.sh は settings.json に触れない。ADR 0002）
     [sudo] /Library/Application Support/ClaudeCode/managed-settings.json  ← 天井
 
   天井レベル: [1] なし  [2] standard(推奨: B4/B5 deny + sandbox)
@@ -600,9 +619,9 @@ $ ./install
 
 | Phase | 内容 | 検証可能なこと |
 |---|---|---|
-| **P0** ✅**完了** | 既存 transcript から friction baseline 取得（`recurrence_rate`/`resignation_rate` の近似も含む）。**`ENFORCEMENT-HONESTY.md` を enforcement コードより先に書く** | `~/.harness/metrics/baseline.json` に §9 の指標が実データで入る |
+| **P0** ✅**完了** | 既存 transcript から friction baseline 取得（`recurrence_rate`/`resignation_rate` の近似も含む）。**`ENFORCEMENT-HONESTY.md` を enforcement コードより先に書く** | `~/.prohairesis/metrics/baseline.json` に §9 の指標が実データで入る |
 | **P1** 可逆性 ✅**完了** | repo 外 object store の checkpoint、`protect` パスの clonefile snapshot、`undo`/`diff`。**policy も hook も deny も無し** | scenario test: `rm -rf src && git clean -xdf && echo garbage > pyproject.toml` → `undo` → tracked/untracked/precious が **byte 一致**。加えて `git log`/`status`/`stash list`/reflog が control repo と **byte 一致**。**この時点で FS 操作の prompt を切ってよい。これだけで本プロジェクトは正当化される** |
-| **P2** 観測 + 計測 | SessionStart/End/PostToolUse shim（全て record-only・`\|\| true`・絶対に block しない）、JSONL sink、`report`/`metrics` | 実 session が valid な `events.jsonl` を生む。hook 実測 overhead p50 < 20ms（それ自体もログ） |
+| **P2** 観測 + 計測 ✅**完了** | SessionStart/End/PostToolUse shim（全て record-only・`\|\| true`・絶対に block しない）、JSONL sink、`report`/`metrics`、hook 登録コマンド、attach-or-create と自動 checkpoint | 実 session が valid な `events.jsonl` を生む。**時間予算は設けない**（当初の「p50 < 20ms」は導出が存在しなかったため撤回。実測 p50 23ms / checkpoint 込み 58ms を記録するのみ。ADR 0002・`docs/METRICS.md`）。加えて scenario test: state ディレクトリを削除・書込不可・ファイル置換し、ゴミと 200KB payload を渡し、repo 外で走らせても **hook は exit 0**。失われた観測は session ディレクトリと失敗要因を共有しない durable な経路に記録される |
 | **P3** verification | 発見（`run_quality_checks.sh`/Makefile/package.json/cargo）→ 正規化、`harness verify`、**failure fingerprint**、有界な context 注入（ポインタ1行のみ） | `~/signate/_template` で `verify --json` が正規化 JSON を返す。注入 context < 50 token。transcript 上で Agent が自発的に `verify` を呼び finding に対処 |
 | **P4a** L7 derived | attempt 導出・elapsed・`last_green`・**recurrence 検出と structured signal**・topology（観測のみ）・`state show`/`timeline`・**signal 抑制フラグ（A/B 対照用）** | 3回同一失敗する仕込み repo で `recurrence` signal が count=3・`last_green` 付きで発火する。**Agent 側の協力ゼロで成立すること**（`hypothesis` を一度も呼ばない session でも全部動く）。signal に戦略文言が1つも含まれないことを golden test で固定。**paired-session A/B（signal 抑制あり/なし）で `strategy_revision_rate` の差を測定できること** —— 差が出なければ L7 の signal 部分は効いておらず、再設計対象 |
 | **P4b** L7 declared | `hypothesis set/reject`・`goal`・session lineage と carry-over | 新 session 開始時に前 session の `rejected` が carry-over 候補として提示され、**自動 merge されない**。`reject` が `reason` と `evidence` 無しでは記録を拒否する |

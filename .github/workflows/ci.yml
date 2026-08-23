@@ -45,6 +45,11 @@ jobs:
       - name: build
         run: go build -o bin/prohairesis ./cmd/prohairesis
 
+      - name: json schema validation
+        run: |
+          python3 -m pip install --quiet jsonschema
+          python3 tools/validate-schema.py
+
       - name: scenario tests
         run: bash tests/run.sh
 

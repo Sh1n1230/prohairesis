@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Sh1n1230/prohairesis/schema/harness.event.v1.json",
+  "title": "harness.event.v1",
+  "description": "One observation from an agent session. This layer records; it never decides. Fields for classification and enforcement are deliberately absent: they belong to a later phase and a later schema version, and reserving them here would invite the recording layer to start judging.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ts", "seq", "session_id", "type", "actor"],
+  "properties": {
+    "schema": { "const": "harness.event.v1" },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC, RFC3339 with milliseconds."
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonic within one session. A gap means an event was lost; the loss itself is recorded out of band, never in this file."
+    },
+    "session_id": { "type": "string", "minLength": 1 },
+    "repo_key": {
+      "type": "string",
+      "description": "Stable repository identity (root commit, or path for a repository with no commits). Paths in this event are relative to that repository."
+    },
+    "type": {
+      "enum": ["session_start", "session_end", "tool"],
+      "description": "A checkpoint is not an event type: meta.json is the single record of what a checkpoint is, and checkpoint_ref points at it."
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter"],
+      "properties": {
+        "adapter": { "type": "string", "minLength": 1 },
+        "agent_session_id": {
+          "type": "string",
+          "description": "The runtime's own session identifier. Several may attach to one prohairesis session."
+        },
+        "grade": {
+          "type": "string",
+          "description": "Adapter capability grade for the hook that produced this event (for example C3, post-execution observation). Recorded so a reader can tell how complete this record can possibly be."
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "description": "Present when type is \"tool\".",
+      "additionalProperties": false,
+      "required": ["kind", "tool"],
+      "properties": {
+        "kind": {
+          "enum": ["read", "write", "delete", "exec", "network", "agent_config", "opaque"],
+          "description": "\"opaque\" is a first-class answer, not a failure. Collapsing an unmappable tool into a real kind manufactures the illusion of complete coverage."
+        },
+        "tool": { "type": "string", "minLength": 1 },
+        "command": {
+          "type": "string",
+          "description": "argv[0] only, for exec. The rest of the command line is never stored: identity is all any metric needs, and a full command line would make this log a new place for secrets to collect."
+        },
+        "argv_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "Digest of the full command line. Answers \"is this the same command as before\" without answering \"what was it\"."
+        },
+        "paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Repository-relative where the path is inside repo_key; otherwise absolute with the home directory written as ~."
+        },
+        "host": { "type": "string" }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "enum": ["ok", "error"] },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "hook_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Time spent inside the hook process, excluding process start. Recorded, and deliberately not budgeted: see docs/METRICS.md."
+    },
+    "checkpoint_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq"],
+      "description": "Where to start from to get back to the tree as of this event. Written on every event, not only on the ones that took a checkpoint.",
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1 },
+        "commit": { "type": "string" },
+        "taken_here": {
+          "type": "boolean",
+          "description": "True when this event is the one that took that checkpoint."
+        }
+      }
+    },
+    "truncated": {
+      "type": "boolean",
+      "description": "The event exceeded the size at which it can still be written with a single write(2), so paths were dropped. Set rather than silently shortening."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "tool" } }, "required": ["type"] },
+      "then": { "required": ["action"] }
+    }
+  ]
+}

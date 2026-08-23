@@ -1,0 +1,29 @@
+# Secret-scanning configuration.
+#
+# There is exactly one exception here, and it is narrow on purpose. A secret
+# scanner that is routinely told to be quiet stops being a scanner, so this file
+# should stay short, and every entry should name the file it exempts and say why
+# a human decided it was safe.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  [rules.allowlist]
+  description = """
+  The golden event records carry git commit ids and SHA-256 digests of command
+  lines -- long hexadecimal strings, which is what a generic key detector is
+  built to notice. They are hashes by design: the observability layer records a
+  digest of a command line precisely so that it never holds the command line
+  itself, so a file full of digests is the layer working, not leaking. Fixed by
+  internal/adapter/claudecode/payload_test.go and documented in
+  docs/adr/0002-what-the-event-log-keeps.md.
+
+  Scoped to these two files and to this rule only.
+  """
+  paths = [
+    '''tests/golden/event\.v1\.jsonl''',
+    '''tests/golden/loss\.v1\.jsonl''',
+  ]

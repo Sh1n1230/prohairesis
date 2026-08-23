@@ -38,6 +38,19 @@ lint() {
   fi
 }
 
+# The shipped binary validates nothing against JSON Schema -- that would cost
+# something on every event to confirm this program's output matches this
+# program's own contract. The check belongs here, once per build, where it
+# catches the thing that actually goes wrong: the schema and the code drifting
+# apart between releases.
+schema_matches_golden() {
+  if python3 -c "import jsonschema" 2>/dev/null; then
+    python3 tools/validate-schema.py
+  else
+    echo "skipped (python jsonschema not installed; CI runs it)"
+  fi
+}
+
 corpus_is_clean() {
   python3 tools/sanitize-corpus.py tests/golden/false-block-corpus.jsonl > /dev/null
 }
@@ -62,6 +75,8 @@ run "unit tests" go test -count=1 ./...
 run "build"      go build -o bin/prohairesis ./cmd/prohairesis
 run "spike: out-of-repo checkpoint store" bash tests/scenarios/spike-shadow-ref.sh
 run "P1: destroy and restore"             bash tests/scenarios/p1-destroy-and-restore.sh
+run "P2: the hook never blocks"           bash tests/scenarios/p2-hook-never-blocks.sh
+run "golden records match the published schemas" schema_matches_golden
 run "published corpus carries no personal data" corpus_is_clean
 run "security-checker (optional)"               security_checker
 
