@@ -296,7 +296,3 @@ func (p Plan) Write() error {
 	}
 	return os.Rename(tmp, p.Path)
 }
-
-// SameContent reports whether two settings files say the same thing, ignoring
-// layout.
-func SameContent(a, b []byte) bool { return canonical(a) == canonical(b) }

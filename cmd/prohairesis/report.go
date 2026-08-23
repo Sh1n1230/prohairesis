@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -19,7 +20,7 @@ import (
 // into the first would make the judgement look like a convenience feature of the
 // debugging tool.
 func cmdReport(args []string) error {
-	s, err := resolveSession(args)
+	s, err := resolveReportSession(args)
 	if err != nil {
 		return err
 	}
@@ -110,6 +111,34 @@ func cmdReport(args []string) error {
 		fmt.Printf("  %s  %s\n", e.TS.Format("15:04:05"), describe(e))
 	}
 	return nil
+}
+
+// resolveReportSession falls back to the most recent session for this
+// repository when none is open.
+//
+// The moment you most want to read what happened is just after it stopped
+// happening -- and by then the hook has closed the session it opened. Refusing
+// to show anything because the session ended would make the command useless at
+// exactly the point it is wanted. Found by running a real session against it.
+func resolveReportSession(args []string) (*session.Session, error) {
+	s, err := resolveSession(args)
+	if err == nil || !errors.Is(err, session.ErrNoSession) {
+		return s, err
+	}
+	repo, rerr := session.DescribeRepo(cwd())
+	if rerr != nil {
+		return nil, err
+	}
+	all, lerr := session.List()
+	if lerr != nil {
+		return nil, err
+	}
+	for _, cand := range all { // List returns newest first.
+		if cand.Repo.Key() == repo.Key() {
+			return cand, nil
+		}
+	}
+	return nil, err
 }
 
 func describe(e event.Event) string {

@@ -99,7 +99,8 @@ func (o *object) encode(indent string) ([]byte, error) {
 		b.WriteString(indent)
 		b.Write(key)
 		b.WriteString(": ")
-		b.Write(reindent(o.vals[k], indent))
+		// Untouched values go back exactly as they were found, layout and all.
+		b.Write(o.vals[k])
 		if i < len(o.keys)-1 {
 			b.WriteByte(',')
 		}
@@ -108,11 +109,6 @@ func (o *object) encode(indent string) ([]byte, error) {
 	b.WriteString("}\n")
 	return b.Bytes(), nil
 }
-
-// reindent leaves a raw value alone. Values arriving from the file already carry
-// their original layout; values this program built are produced with the same
-// indentation, so neither needs touching.
-func reindent(raw json.RawMessage, _ string) []byte { return raw }
 
 // detectIndent reads the file's own indentation off its first indented line, so
 // that anything added matches what is already there.
@@ -125,18 +121,4 @@ func detectIndent(b []byte) string {
 		return line[:len(line)-len(trimmed)]
 	}
 	return "  "
-}
-
-// canonical reduces JSON to a form that compares by content rather than layout.
-// Used to answer one question: has anyone changed this file since we touched it?
-func canonical(b []byte) string {
-	var v any
-	if err := json.Unmarshal(b, &v); err != nil {
-		return string(b)
-	}
-	out, err := json.Marshal(v)
-	if err != nil {
-		return string(b)
-	}
-	return string(out)
 }

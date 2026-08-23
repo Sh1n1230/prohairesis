@@ -37,7 +37,6 @@ type Sample struct {
 	UserRejections int
 
 	First time.Time
-	Last  time.Time
 
 	// UninterruptedS are the gaps, in seconds, between consecutive human turns.
 	UninterruptedS []float64

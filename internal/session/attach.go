@@ -1,7 +1,6 @@
 package session
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -220,6 +219,3 @@ func ResolveDir(reported string) string {
 	}
 	return d
 }
-
-// ErrNotInRepo is returned when observation is asked for outside a working tree.
-var ErrNotInRepo = fmt.Errorf("not inside a git working tree")

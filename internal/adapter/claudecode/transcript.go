@@ -110,13 +110,8 @@ func readTranscript(path string) (metrics.Sample, bool) {
 			s.CWD = r.CWD
 		}
 		ts, hasTS := parseTS(r.Timestamp)
-		if hasTS {
-			if s.First.IsZero() || ts.Before(s.First) {
-				s.First = ts
-			}
-			if ts.After(s.Last) {
-				s.Last = ts
-			}
+		if hasTS && (s.First.IsZero() || ts.Before(s.First)) {
+			s.First = ts
 		}
 
 		blocks, isString := contentBlocks(r.Message)
