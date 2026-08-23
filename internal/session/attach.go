@@ -54,16 +54,17 @@ func AttachOrCreate(dir, adapter, agentID string) (s *Session, created bool, err
 	}
 	err = withLock(lock, func() error {
 		cur, cerr := CurrentFor(repo)
-		if cerr == nil {
+		switch cerr {
+		case nil:
 			s = cur
-		} else if cerr == ErrNoSession {
+		case ErrNoSession:
 			n, serr := StartFor(repo, adapter)
 			if serr != nil {
 				return serr
 			}
 			n.CreatedByHook = true
 			s, created = n, true
-		} else {
+		default:
 			return cerr
 		}
 		if agentID != "" && !contains(s.Attached, agentID) {

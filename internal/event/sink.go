@@ -54,7 +54,7 @@ func (s *Sink) append(e *Event) error {
 	if err != nil {
 		return fmt.Errorf("open %s: %w", filepath.Base(s.Path), err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// The lock serializes concurrent hooks -- the runtime may run tool calls in
 	// parallel -- so that sequence numbers cannot collide and lines cannot

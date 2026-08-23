@@ -88,7 +88,7 @@ func readTranscript(path string) (metrics.Sample, bool) {
 	if err != nil {
 		return metrics.Sample{}, false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	s := metrics.Sample{Source: path}
 	records := 0

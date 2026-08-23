@@ -30,7 +30,7 @@ func Read(dir string) (Log, error) {
 		}
 		return Log{}, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var out Log
 	sc := bufio.NewScanner(f)

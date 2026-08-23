@@ -21,7 +21,7 @@ func cmdHooks(args []string) error {
 	}
 	rest := args[1:]
 	scopeArg, rest := flag(rest, "scope")
-	rest, dry := has(rest, "dry-run")
+	_, dry := has(rest, "dry-run")
 
 	// The project scope is the default because it is the reversible one: it
 	// changes a single repository, in a file its owner already reads, and
