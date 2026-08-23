@@ -1,0 +1,2 @@
+{"schema":"harness.loss.v1","ts":"2026-08-23T14:11:50.9Z","session_id":"20260823T141150Z-c58d7a776b","reason":"open events.jsonl: permission denied","stage":"events","count":1}
+{"schema":"harness.loss.v1","ts":"2026-08-23T14:12:01.4Z","reason":"create session directory: read-only file system; and the loss file itself: read-only file system","stage":"loss","count":1}

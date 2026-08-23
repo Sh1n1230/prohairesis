@@ -51,6 +51,9 @@ type Session struct {
 	ParentSession string `json:"parent_session,omitempty"`
 	TaskID        string `json:"task_id,omitempty"`
 
+	// Ownership decides who may close this session. See attach.go.
+	Ownership
+
 	Checkpoints []Checkpoint `json:"checkpoints"`
 }
 
@@ -122,6 +125,11 @@ func Start(dir, adapter string) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	return StartFor(repo, adapter)
+}
+
+// StartFor is Start for a repository already described.
+func StartFor(repo Repo, adapter string) (*Session, error) {
 	s := &Session{
 		Schema:  schemaName,
 		ID:      newID(),
@@ -193,6 +201,19 @@ func Current(dir string) (*Session, error) {
 	repo, err := DescribeRepo(dir)
 	if err != nil {
 		return nil, err
+	}
+	return CurrentFor(repo)
+}
+
+// CurrentFor is Current for a repository already described.
+//
+// Describing a repository costs four git invocations, and the hook path used to
+// pay for it twice on every tool call: once to find the repository and once
+// again inside the lookup that followed. Same answer, twice the price, on the
+// hottest path this program has.
+func CurrentFor(repo Repo) (*Session, error) {
+	if id := strings.TrimSpace(os.Getenv(EnvSession)); id != "" {
+		return Load(id)
 	}
 	p, err := pointerPath(repo)
 	if err != nil {

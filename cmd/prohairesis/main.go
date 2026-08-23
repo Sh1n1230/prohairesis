@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Sh1n1230/prohairesis/internal/pathx"
 	"github.com/Sh1n1230/prohairesis/internal/session"
 	"github.com/Sh1n1230/prohairesis/internal/snapshot"
 )
@@ -37,6 +38,15 @@ reversibility
   undo [SEQ] [--dry-run]           restore the working tree to a checkpoint
   protect list|add PATH|rm PATH    declare an ignored path precious, so that
                                    checkpoints capture it too
+
+observation
+  hooks install [--scope project|user] [--dry-run]
+  hooks uninstall [--scope ...]    register with the agent runtime, or stop.
+                                   Recording only: nothing here can refuse a
+                                   tool call. Project scope is the trial; user
+                                   scope is install-once, in effect everywhere
+  report [ID]                      what happened in one session
+  metrics                          friction now against the baseline before this
 
 diagnostics
   doctor                           report what is and is not in effect
@@ -63,6 +73,16 @@ func main() {
 		err = cmdUndo(args)
 	case "protect":
 		err = cmdProtect(args)
+	case "hooks":
+		err = cmdHooks(args)
+	case "hook":
+		// Called by the agent runtime, many times a session. It reports nothing
+		// and fails at nothing: see cmdHook.
+		os.Exit(cmdHook(args))
+	case "report":
+		err = cmdReport(args)
+	case "metrics":
+		err = cmdMetrics(args)
 	case "doctor":
 		os.Exit(cmdDoctor())
 	case "version", "--version", "-v":
@@ -397,21 +417,9 @@ func relToRepo(root, p string) (string, error) {
 	// Resolve both sides: on macOS the temp and home directories are reached
 	// through symlinks, so a raw string comparison reports a path inside the
 	// repository as being outside it.
-	rel, err := filepath.Rel(resolve(root), resolve(abs))
+	rel, err := filepath.Rel(pathx.Resolve(root), pathx.Resolve(abs))
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return "", fmt.Errorf("%s is outside the repository at %s", p, root)
 	}
 	return rel, nil
-}
-
-// resolve follows symlinks as far as the path exists, leaving the rest intact.
-func resolve(p string) string {
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		return r
-	}
-	parent, base := filepath.Split(p)
-	if parent == "" || parent == p {
-		return p
-	}
-	return filepath.Join(resolve(filepath.Clean(parent)), base)
 }
