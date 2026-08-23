@@ -48,6 +48,17 @@ jobs:
               -o "$out/prohairesis" ./cmd/prohairesis
             tar -czf "dist/prohairesis_${TAG}_${os}_${arch}.tar.gz" -C "$out" prohairesis
           done
+          # Prove the stamp actually landed. -X silently does nothing when the
+          # target is a const, which would ship a binary reporting the wrong
+          # version with no failure anywhere. Check the artefact, not the source.
+          got=$("dist/build/linux/amd64/prohairesis" version)
+          want="${TAG#v}"
+          if [ "$got" != "$want" ]; then
+            echo "built binary reports $got, expected $want" >&2
+            exit 1
+          fi
+          echo "version stamp verified: $got"
+
           rm -rf dist/build
           cd dist && sha256sum *.tar.gz > checksums.txt
           cat checksums.txt

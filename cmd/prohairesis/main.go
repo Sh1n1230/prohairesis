@@ -19,9 +19,13 @@ import (
 	"github.com/Sh1n1230/prohairesis/internal/snapshot"
 )
 
-const version = "0.1.0-p1"
+// version is stamped at release time with -ldflags "-X main.version=...".
+// It must stay a var: the linker cannot write to a const, and would
+// silently leave the placeholder in a published binary.
+var version = "0.0.0-dev"
 
-const usage = `prohairesis ` + version + ` -- machine-level agent infrastructure
+// usage embeds version, which is written at link time, so it cannot be a const.
+var usage = `prohairesis ` + version + ` -- machine-level agent infrastructure
 
 reversibility
   session start [--adapter NAME]   begin a session for the repository in the cwd
