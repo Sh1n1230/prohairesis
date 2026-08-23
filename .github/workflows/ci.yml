@@ -35,7 +35,7 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb0f9e6e3b # v9.0.0
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: latest
 
@@ -107,9 +107,8 @@ jobs:
           chmod +x osv-scanner
           ./osv-scanner scan --recursive . || true
 
-      - uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4 # v0.32.0
-        with:
-          scan-type: config
-          scan-ref: .
-          exit-code: '1'
-          severity: CRITICAL,HIGH
+      - name: trivy (configuration scan)
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b "$RUNNER_TEMP/bin"
+          "$RUNNER_TEMP/bin/trivy" config --exit-code 1 --severity CRITICAL,HIGH .
