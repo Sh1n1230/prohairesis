@@ -1,0 +1,97 @@
+# コントリビューション
+
+[English](../../CONTRIBUTING.md)
+
+## ソースの取得
+
+```bash
+git clone https://github.com/Sh1n1230/prohairesis.git prohairesis/main
+cd prohairesis/main
+go build -o bin/prohairesis ./cmd/prohairesis
+bash tests/run.sh
+```
+
+ネストしたパスは誤記ではありません。[並行作業](#git-worktree-による並行作業) を参照してください。
+
+prohairesis を**使いたいだけ**であれば、これらは一切不要です。[README.ja.md](README.ja.md) のインストール手順を参照してください。
+
+## ブランチ
+
+`main` は唯一の常設ブランチであり、常に動作する状態を保ちます。**`main` への直接 push は拒否されます。** すべての変更は Pull Request 経由で入り、マージ前に CI が green である必要があります。
+
+作業は使い捨てのトピックブランチで行い、マージ後に削除します。
+
+```
+種類/作業内容
+種類/#Issue番号-作業内容
+```
+
+| プレフィックス | 用途 | 例 |
+| --- | --- | --- |
+| `feat/` | 新機能の追加 | `feat/event-ledger` |
+| `fix/` | バグ修正 | `fix/restore-empty-dirs` |
+| `refactor/` | 構造改善（挙動は変えない） | `refactor/policy-evaluator` |
+| `chore/` | 設定・依存・ツール類の雑務 | `chore/update-actions` |
+| `docs/` | ドキュメントのみの変更 | `docs/adapter-interface` |
+
+## `git worktree` による並行作業
+
+worktree はブランチごとに独立したディレクトリを与える仕組みで、作業中の状態を保持したまま別の作業に移れます。本プロジェクトでは通常より重要です — **テストがワーキングツリーを破壊して復元する**ため、中途半端な stash が視界に入っている状態でテストを回すのは避けたいからです。
+
+推奨構成 — clone は `main/` に置き、各ブランチはその兄弟ディレクトリにします:
+
+```text
+prohairesis/
+├── main/          リポジトリ本体（main ブランチ）
+├── feat-ledger/   feat/event-ledger の worktree
+└── fix-restore/   fix/restore-empty-dirs の worktree
+```
+
+```bash
+cd prohairesis/main
+git worktree add ../feat-ledger -b feat/event-ledger
+cd ../feat-ledger
+# ... 作業・コミット・push・PR 作成 ...
+
+# PR がマージされたら
+cd ../main
+git worktree remove ../feat-ledger
+git branch -d feat/event-ledger
+```
+
+`git worktree list` で開いている worktree を確認できます。
+
+## CI が要求するもの
+
+以下のすべてが通らなければ Pull Request はマージできません。ゲートに**人間の承認は含まれません** — メンテナが1人の状況で承認要件を課すと、デッドロックになるか形骸化するかのどちらかにしかならないため、ゲートは機械が担います。
+
+| チェック | コマンド |
+| --- | --- |
+| フォーマット | `gofmt -l .` が何も出力しないこと |
+| Lint | `golangci-lint run` |
+| 型・疑わしい構文 | `go vet ./...` |
+| ユニットテスト | `go test ./...` |
+| ビルド | `go build ./...` と全リリースターゲット |
+| シナリオテスト | `tests/scenarios/*.sh` |
+| 公開コーパスの清浄性 | `tools/sanitize-corpus.py` が識別可能なトークンを検出しないこと |
+
+ローカルでまとめて実行:
+
+```bash
+bash tests/run.sh
+```
+
+### コーパス検査は省略できません
+
+`tests/golden/false-block-corpus.jsonl` は実際のエージェントセッションから抽出したものです。公開されるのはサニタイズ済みのコピーで、生データはそれが生まれたマシンから出ません。CI がサニタイザの検証を再実行するのは、将来コーパスを再生成した人が**うっかり個人情報を公開する事故**を構造的に防ぐためです。このチェックが落ちた場合、緩めないでください。
+
+## 変更を書くとき
+
+- **設計判断は `docs/adr/` に置きます。** `docs/DESIGN.ja.md` の記述と矛盾する変更を入れる場合は ADR を追加してください。コードに合わせて設計文書を黙って書き換えないこと。
+- **`docs/ENFORCEMENT-HONESTY.md` はコードを制約する側です（逆ではありません）。** そこに書かれた主張を偽にする変更であれば、その変更が誤っているか、さもなければ同じコミットでその文書を訂正し、弱まった保証を明示する必要があります。
+- **テストは実装ではなく invariant を検証します。** 中心となるのは「セッションが有効でもユーザーの git 表層がバイト単位で同一である」ことで、`tests/scenarios/p1-destroy-and-restore.sh` で検証されています。これを緩めないでください。
+- コメントは **なぜ** を説明します。**何を**しているかはコードが既に語っています。
+
+## 言語
+
+コード・コメント・主要ドキュメントは英語です。日本語版は `docs/ja/` に置きます。`docs/DESIGN.ja.md` は設計記録であり、日本語のみで維持されます（利用者向けではなく開発用の文書のため）。

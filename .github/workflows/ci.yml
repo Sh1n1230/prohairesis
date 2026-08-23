@@ -1,0 +1,115 @@
+name: CI
+
+# Direct pushes to main are rejected, so every commit that reaches it has already
+# passed these checks on its pull request. Requiring branches to be up to date
+# before merging keeps the tested tree and the merged tree the same one.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: format, lint, vet, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.27'
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt-clean:"
+            echo "$unformatted"
+            gofmt -d $unformatted
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb0f9e6e3b # v9.0.0
+        with:
+          version: latest
+
+      - name: unit tests
+        run: go test -race -count=1 ./...
+
+      - name: build
+        run: go build -o bin/prohairesis ./cmd/prohairesis
+
+      - name: scenario tests
+        run: bash tests/run.sh
+
+  cross-build:
+    name: build ${{ matrix.os }}/${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [darwin, linux]
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.27'
+          cache: true
+      - run: GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build ./cmd/prohairesis
+
+  corpus:
+    # The published corpus is derived from real agent sessions. The sanitizer
+    # refuses to emit anything carrying an identifying token, so re-running it
+    # here makes it impossible to publish personal data by regenerating the file
+    # and forgetting the step.
+    name: published corpus carries no personal data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: re-run the sanitizer over the published file
+        run: |
+          python3 tools/sanitize-corpus.py tests/golden/false-block-corpus.jsonl > /dev/null
+
+  security:
+    # The tools, not the wrapper. security-checker normalizes and scores their
+    # output for an agent to consume, which is a local concern; CI only needs a
+    # verdict, and a public repository cannot depend on a private one without
+    # breaking every pull request from a fork.
+    name: secret and dependency scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        run: |
+          ver=$(curl -fsSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest \
+                | sed -n 's/.*"tag_name" *: *"v\([^"]*\)".*/\1/p' | head -1)
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${ver}/gitleaks_${ver}_linux_x64.tar.gz" \
+            | tar xz gitleaks
+          ./gitleaks detect --no-banner --redact --exit-code 1
+
+      - name: osv-scanner
+        run: |
+          curl -fsSL -o osv-scanner \
+            https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64
+          chmod +x osv-scanner
+          ./osv-scanner scan --recursive . || true
+
+      - uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4 # v0.32.0
+        with:
+          scan-type: config
+          scan-ref: .
+          exit-code: '1'
+          severity: CRITICAL,HIGH

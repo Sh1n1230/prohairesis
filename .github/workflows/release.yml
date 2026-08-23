@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # create the release and upload assets
+      id-token: write      # sign the build provenance attestation
+      attestations: write  # publish it
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.27'
+          cache: true
+
+      - name: gate on the full check suite
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test -count=1 ./...
+          bash tests/run.sh
+
+      - name: build every target
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          mkdir -p dist
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+            os=${target%/*}
+            arch=${target#*/}
+            out="dist/build/$os/$arch"
+            mkdir -p "$out"
+            # Trimpath and a pinned version keep the archive reproducible, which
+            # is what makes the published checksum worth checking.
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build \
+              -trimpath \
+              -ldflags "-s -w -X main.version=${TAG#v}" \
+              -o "$out/prohairesis" ./cmd/prohairesis
+            tar -czf "dist/prohairesis_${TAG}_${os}_${arch}.tar.gz" -C "$out" prohairesis
+          done
+          rm -rf dist/build
+          cd dist && sha256sum *.tar.gz > checksums.txt
+          cat checksums.txt
+
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: 'dist/*.tar.gz'
+
+      - name: publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          notes=$(cat <<'EOF'
+          ## Install
+
+          ```sh
+          curl -fsSL https://raw.githubusercontent.com/Sh1n1230/prohairesis/main/install.sh | sh
+          ```
+
+          The installer verifies the archive against `checksums.txt` below and
+          refuses to continue on a mismatch. Read it before you run it — this
+          project argues you should not trust what you have not checked, and that
+          applies to its own installer.
+
+          Prefer to do it yourself:
+
+          ```sh
+          curl -fsSLO https://github.com/Sh1n1230/prohairesis/releases/download/TAGPLACEHOLDER/prohairesis_TAGPLACEHOLDER_darwin_arm64.tar.gz
+          curl -fsSLO https://github.com/Sh1n1230/prohairesis/releases/download/TAGPLACEHOLDER/checksums.txt
+          shasum -a 256 -c checksums.txt --ignore-missing
+          tar -xzf prohairesis_TAGPLACEHOLDER_darwin_arm64.tar.gz
+          mv prohairesis ~/.local/bin/
+          ```
+
+          ## Stronger verification
+
+          Every archive carries a signed build provenance attestation, so you can
+          confirm it was produced by this repository's release workflow and not
+          by someone else:
+
+          ```sh
+          gh attestation verify prohairesis_TAGPLACEHOLDER_darwin_arm64.tar.gz --repo Sh1n1230/prohairesis
+          ```
+          EOF
+          )
+          printf '%s' "$notes" | sed "s/TAGPLACEHOLDER/$TAG/g" > notes.md
+          gh release create "$TAG" dist/*.tar.gz dist/checksums.txt \
+            --title "$TAG" --notes-file notes.md
