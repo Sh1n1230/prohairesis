@@ -71,6 +71,8 @@ as quiet.
 | `mean_uninterrupted_run` | wall clock between consecutive human turns | up | Nothing about sessions the human walked away from — those inflate it badly. Read the median. |
 | `median_uninterrupted_run` | as above, at the median | up | The shape of the distribution; a bimodal one hides here. |
 | `tool_calls_per_human_turn` | ratio of totals | up | Whether the extra calls were useful. More calls per turn is not more progress per turn. |
+| `explanation_cost` | characters a person typed across a session, first turn included | down | Whether the typing was explanation or instruction. It counts what the human had to write, not why. Runes, not tokens and not bytes: a tokenizer here would be a second implementation free to disagree with the runtime's own, and bytes would report a Japanese session as three times an English one saying the same thing. Read beside `interrupts_per_session` — the same total is a different burden in one turn than in twenty. |
+| `median_explanation_cost` | as above, at the median | down | Little on its own, and it is here because the mean says almost nothing without it: on the first machine measured the mean was six times the median, and one session of seventy-one carried a third of the whole total. |
 | `recurrence_rate` | share of failures whose normalized fingerprint already occurred earlier in the same session | down | Whether two failures with different wording were really the same failure. The fingerprint is mechanical — lowercase, strip paths, hex blobs and numbers — with no interpretation, which is what keeps it from quietly becoming a judgement. |
 
 ### Recorded, and deliberately not budgeted
@@ -113,6 +115,7 @@ easy.
 | `resignation_rate` | P3. Telling "gave up" from "correctly concluded it was impossible" needs the verification contract. |
 | `strategy_revision_rate` | P4. It measures the effect of the layer that does not exist. |
 | `rediscovery_cost` | P4. Knowing something was re-explored needs a record of what had already been explored. |
+| `restated_context_rate` | Unscheduled. Repeats of normalized text are dominated by short affirmations, and a person explaining the same fact twice rarely uses the same words. Separating a restatement from a fresh instruction needs inference this layer must not do, so the half of `explanation_cost` that counts re-explanation is not shipped rather than shipped wrong. |
 
 `resignation_rate` deserves a warning it will still deserve when it exists: it is
 an approximation of resignation and cannot, alone, tell a session that gave up

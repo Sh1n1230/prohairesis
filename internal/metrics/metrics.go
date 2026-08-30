@@ -36,6 +36,12 @@ type Sample struct {
 	RepeatErrors   int
 	UserRejections int
 
+	// HumanRunes is how much a person had to type across the whole session,
+	// counted in runes rather than bytes so that a Japanese session is not
+	// reported as three times the effort of an English one saying the same
+	// thing.
+	HumanRunes int
+
 	First time.Time
 
 	// UninterruptedS are the gaps, in seconds, between consecutive human turns.
@@ -87,6 +93,8 @@ type totals struct {
 	toolErrors     int
 	repeatErrors   int
 	userRejections int
+	humanRunes     int
+	humanRunesPer  []float64
 	gaps           []float64
 }
 
@@ -98,6 +106,8 @@ func sum(samples []Sample) totals {
 		t.toolErrors += s.ToolErrors
 		t.repeatErrors += s.RepeatErrors
 		t.userRejections += s.UserRejections
+		t.humanRunes += s.HumanRunes
+		t.humanRunesPer = append(t.humanRunesPer, float64(s.HumanRunes))
 		t.gaps = append(t.gaps, s.UninterruptedS...)
 	}
 	return t
@@ -147,6 +157,30 @@ func Compute(current, baseline []Sample) []Indicator {
 			Baseline:  ratio(b, float64(b.toolCalls), float64(b.humanTurns)),
 		},
 		{
+			Name:      "explanation_cost",
+			Unit:      "runes",
+			Direction: "down",
+			Proxy: "characters a person typed across a session, including the turn " +
+				"that stated the task. Not tokens: a tokenizer here would be a " +
+				"second implementation free to disagree with the runtime's own, " +
+				"and what it counts per character is not constant across languages. " +
+				"Read beside interrupts_per_session, not instead of it -- the same " +
+				"total is a different burden in one turn than in twenty",
+			Value:    ratio(c, float64(c.humanRunes), float64(c.sessions)),
+			Baseline: ratio(b, float64(b.humanRunes), float64(b.sessions)),
+		},
+		{
+			Name:      "median_explanation_cost",
+			Unit:      "runes",
+			Direction: "down",
+			Proxy: "as above, at the median. On the first machine measured the mean " +
+				"was six times the median and one session in seventy-one carried a " +
+				"third of the total, so the mean describes that session and this " +
+				"describes the rest",
+			Value:    median(c.humanRunesPer),
+			Baseline: median(b.humanRunesPer),
+		},
+		{
 			Name:      "recurrence_rate",
 			Direction: "down",
 			Proxy: "share of failures whose normalized fingerprint already occurred " +
@@ -194,6 +228,14 @@ func Pending() []Indicator {
 			Name:        "rediscovery_cost",
 			Direction:   "down",
 			Unavailable: "needs observed topology to know what had already been discovered",
+		},
+		{
+			Name:      "restated_context_rate",
+			Direction: "down",
+			Unavailable: "needs to tell a restatement from a fresh instruction. Repeats of " +
+				"normalized text are dominated by short affirmations, and a person " +
+				"explaining the same fact twice rarely uses the same words; " +
+				"separating them needs inference this layer must not do",
 		},
 	}
 }

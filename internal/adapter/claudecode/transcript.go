@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Sh1n1230/prohairesis/internal/metrics"
 )
@@ -120,6 +121,7 @@ func readTranscript(path string) (metrics.Sample, bool) {
 		// back in, and not a sidechain: those are the runtime talking to itself.
 		if r.Type == "user" && !r.IsSidechain && (isString || !hasBlock(blocks, "tool_result")) {
 			s.HumanTurns++
+			s.HumanRunes += utf8.RuneCountInString(humanText(r.Message))
 			if hasTS {
 				humanTimes = append(humanTimes, ts)
 			}
@@ -157,6 +159,26 @@ func readTranscript(path string) (metrics.Sample, bool) {
 			humanTimes[i].Sub(humanTimes[i-1]).Seconds())
 	}
 	return s, true
+}
+
+// humanText returns what a person actually typed in one turn.
+//
+// The caller decides which records are human turns; this only extracts their
+// text, and it counts every one of them, including the turn that stated the
+// task. Excluding that turn would be a rule invented here rather than derived,
+// and the figure it feeds is a comparison of two windows treated identically --
+// which is what makes a consistent rule matter more than a clever one.
+func humanText(msg json.RawMessage) string {
+	if len(msg) == 0 {
+		return ""
+	}
+	var m struct {
+		Content json.RawMessage `json:"content"`
+	}
+	if json.Unmarshal(msg, &m) != nil {
+		return ""
+	}
+	return blockText(m.Content)
 }
 
 func contentBlocks(msg json.RawMessage) ([]block, bool) {

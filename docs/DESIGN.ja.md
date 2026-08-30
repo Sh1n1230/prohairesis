@@ -444,7 +444,8 @@ Q3 はこれ無しでは反証不能。ゆえに Phase 2 で出荷する。出�
 | `recurrence_rate` | 直前と同一 failure fingerprint を持つ attempt の割合 | ↓ | transcript から近似取得可能 |
 | `rediscovery_cost` | 既に topology に記録済みの領域を再探索した tool call 数 | ↓ | 新規 |
 | `resignation_rate` | verify green にも到達せず、根拠付き `rejected` の記録も無いまま終わった session の割合 | ↓ | 近似取得可能 |
-| **`explanation_cost`** | 人間が Agent にコンテキストを説明するために払った量（session あたりの人間発話 token、および同一事実の再説明回数） | ↓ | **取得可能**（transcript から）。§14.5 |
+| **`explanation_cost`** | session あたり人間が打鍵した文字数（rune。token ではない）。分布が歪むため `median_explanation_cost` と対で読む | ↓ | **取得済み。** mean 6,166 / median 1,036 rune（71 session）。§14.5 |
+| ~~同一事実の再説明回数~~ → `restated_context_rate` | 正規化テキストの反復は短い相槌が支配し、言い換えは検出できない | ↓ | **未取得。** 推論を要するため出荷しない（`Pending()`） |
 | **`estimate_ratio`** | declared な工数見積もり ÷ verify green までの実測。**方向は ↓ ではなく →1.0** | →1.0 | 新規。実測側は既存。§14.4 |
 
 ### 9.1 「AI はすぐ諦める」をどう測るか — 単一指標に依存しない
@@ -650,7 +651,7 @@ $ ./install
 
 | Phase | 内容 | 検証可能なこと | 依存 |
 |---|---|---|---|
-| **A0** 説明コストの測定 | `explanation_cost` を既存 transcript から算出し baseline に加える。**コードより先に測る** | 実データで値が出る。§9.1 の三角測量に組み込まれ、単独では結論に使われない | なし（今すぐ可能） |
+| **A0** 説明コストの測定 ✅**完了** | `explanation_cost` と `median_explanation_cost` を既存 transcript から算出し baseline に加えた。再説明の側は `restated_context_rate` として `Pending()` に据え置き | 71 session の実データで mean 6,166 / median 1,036 rune。**分布は歪んでおり**（1 session が総量の 1/3）、mean 単独では読めないことが測定で判明したため median を対で出す | なし |
 | **A1** L7 追補 | `estimate`（declared）と `stale_read` signal（derived） | `estimate_ratio` が verify-green を分母として算出される。仕込み repo で並行変更が `stale_read` を発火させ、**`changed_by` が `unattributed` を超えて主張しない**。signal に戦略文言が無いことを golden test で固定 | **P3**（完了定義）・P4a（attempt 境界） |
 | **A2** 説明可能性の記録 | `ACCOUNTABILITY-HONESTY.md` を**先に**執筆 → ADR 0004 → 記録の住所と読者の分離 → gateway | 文書がコードより先に存在する。ADR 0002 の保証が弱められていないか、弱めたなら明記されている。**`interrupts_per_session` が A1 比で増えていないこと（承認要求への転落の検出）。増えていたら出荷しない** | P3・A1 |
 | **A3** surrogate 変換パス | 開発工程の不可逆点（レビュー・CI/CD・デプロイ）を可逆な surrogate に変換する設計 | 工程ごとに「harness が代行していないこと」が言えること。§12 反論3 の宿題への回答 | A2 |
