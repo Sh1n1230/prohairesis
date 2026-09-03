@@ -39,6 +39,12 @@ reversibility
   protect list|add PATH|rm PATH    declare an ignored path precious, so that
                                    checkpoints capture it too
 
+verification
+  verify [--json]                  run the checks this repository declares and
+                                   report them in one normalized shape. It gates
+                                   nothing: the exit code reports what your own
+                                   tools said
+
 observation
   hooks install [--scope project|user] [--dry-run]
   hooks uninstall [--scope ...]    register with the agent runtime, or stop.
@@ -73,6 +79,8 @@ func main() {
 		err = cmdUndo(args)
 	case "protect":
 		err = cmdProtect(args)
+	case "verify":
+		os.Exit(cmdVerify(args))
 	case "hooks":
 		err = cmdHooks(args)
 	case "hook":

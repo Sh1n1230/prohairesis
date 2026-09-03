@@ -25,6 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PAIRS = [
     ("schema/harness.event.v1.json", "tests/golden/event.v1.jsonl"),
     ("schema/harness.loss.v1.json", "tests/golden/loss.v1.jsonl"),
+    ("schema/harness.verify.v1.json", "tests/golden/verify.v1.jsonl"),
 ]
 
 failed = 0

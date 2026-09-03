@@ -76,6 +76,7 @@ run "build"      go build -o bin/prohairesis ./cmd/prohairesis
 run "spike: out-of-repo checkpoint store" bash tests/scenarios/spike-shadow-ref.sh
 run "P1: destroy and restore"             bash tests/scenarios/p1-destroy-and-restore.sh
 run "P2: the hook never blocks"           bash tests/scenarios/p2-hook-never-blocks.sh
+run "P3: verification is not a gate"       bash tests/scenarios/p3-verify.sh
 run "golden records match the published schemas" schema_matches_golden
 run "published corpus carries no personal data" corpus_is_clean
 run "security-checker (optional)"               security_checker

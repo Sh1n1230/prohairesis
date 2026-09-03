@@ -13,6 +13,7 @@ import (
 	"github.com/Sh1n1230/prohairesis/internal/gitx"
 	"github.com/Sh1n1230/prohairesis/internal/home"
 	"github.com/Sh1n1230/prohairesis/internal/session"
+	"github.com/Sh1n1230/prohairesis/internal/verify"
 )
 
 func cmdDoctor() int {
@@ -80,6 +81,22 @@ func cmdDoctor() int {
 			"%d observation(s) could not be written; the event log has holes and its "+
 				"silence does not mean nothing happened (most recent %s)", lost, age(lastLoss)),
 			lossPath())
+	}
+
+	// --- verification --------------------------------------------------------
+	fmt.Println()
+	fmt.Println("verification")
+	if repoRoot == "" {
+		diag.Line(diag.Info, "not inside a git working tree", cwd())
+	} else if checks := verify.Discover(repoRoot); len(checks) == 0 {
+		// Not a finding. A repository that declares no checks is a repository
+		// this layer has nothing to say about, and inventing one would be the
+		// single thing L6 must never do.
+		diag.Line(diag.Info, "no checks are declared here; verify has nothing to run", repoRoot)
+	} else {
+		for _, c := range checks {
+			diag.Line(diag.Info, "will run "+c.Category, c.Source)
+		}
 	}
 
 	// --- adapter -------------------------------------------------------------

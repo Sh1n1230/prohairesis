@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Sh1n1230/prohairesis/internal/event"
+	"github.com/Sh1n1230/prohairesis/internal/pathx"
 )
 
 func TestUnmappedToolsAreOpaqueRatherThanGuessedAt(t *testing.T) {
@@ -74,8 +75,8 @@ func TestPathsAreRelativeInsideTheRepositoryAndVisibleOutsideIt(t *testing.T) {
 		"/home/someone/.zshrc":                "~/.zshrc",
 		"/etc/hosts":                          "/etc/hosts",
 	} {
-		if got := NormalizePath(in, repo, home); got != want {
-			t.Errorf("NormalizePath(%q) = %q, want %q", in, got, want)
+		if got := pathx.Relative(in, repo, home); got != want {
+			t.Errorf("pathx.Relative(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -83,7 +84,7 @@ func TestPathsAreRelativeInsideTheRepositoryAndVisibleOutsideIt(t *testing.T) {
 // Reaching outside the repository is the one thing an observer most needs told.
 // Collapsing it into a marker would discard exactly the event worth keeping.
 func TestAPathOutsideTheRepositoryIsNotCollapsed(t *testing.T) {
-	got := NormalizePath("/home/someone/.ssh/config", "/home/someone/work/project", "/home/someone")
+	got := pathx.Relative("/home/someone/.ssh/config", "/home/someone/work/project", "/home/someone")
 	if !strings.Contains(got, ".ssh") {
 		t.Fatalf("path outside the repository was flattened to %q", got)
 	}

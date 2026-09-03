@@ -33,9 +33,11 @@ prohairesis hooks uninstall                # 元の設定ファイルにバイ�
 
 ここで登録されるものは tool call を拒否できません。すべての hook は、失敗した経路も含めて、あらゆる場合に exit 0 で終わります —— これは意図ではなく `tests/scenarios/p2-hook-never-blocks.sh` で表明されています。
 
-**未実装:** 検証契約（verification contract）、メタ状態レイヤー（meta-state layer）、ポリシーコンパイラ（policy compiler）、マシン上限（machine ceiling）。これらはこの順で以降のフェーズに入ります。
+同じく動作するもの: **`prohairesis verify`** —— リポジトリが既に宣言している検査を実行し、どのツールが出したものであっても1つの形状で報告します。
 
-つまり現段階の prohairesis は、**作業を復旧可能に保ち、何が起きたかを記録する**ものです。何も判断しませんし、何も止められません。
+**未実装:** メタ状態レイヤー（meta-state layer）、ポリシーコンパイラ（policy compiler）、マシン上限（machine ceiling）。これらはこの順で以降のフェーズに入ります。
+
+つまり現段階の prohairesis は、**作業を復旧可能に保ち、何が起きたかを記録し、リポジトリ自身の検査が通っているかをエージェントに伝える**ものです。何も判断しませんし、何も止められません。
 
 ## なぜ可逆性を最優先にするのか
 
@@ -74,6 +76,9 @@ prohairesis undo --dry-run     # 復元で何が行われるかを確認（ド�
 prohairesis undo               # ツリーをチェックポイントの状態に復元
 prohairesis session end        # セッションを終了
 
+prohairesis verify             # このリポジトリが宣言している検査を実行
+prohairesis verify --json      # 同じものを、エージェントが読む形状で
+
 prohairesis report             # 1つのセッションで何が起きたか
 prohairesis metrics            # 導入前のベースラインに対する現在の摩擦
 ```
@@ -81,6 +86,14 @@ prohairesis metrics            # 導入前のベースラインに対する現�
 手動で開始したセッションは、あなたが終了するまで開いたままです。エージェントの再起動は、あなたが戻れるようにしておきたかった地点を捨てる理由になりません。hook が自分のために開いたセッションは、それを使っていた最後のエージェントが去ったときに閉じます。
 
 終了コードは全体で統一されています: `0` 正常（clean）、`1` ゲート失敗（gate failed）、`2` エラー（error）。
+
+## 検証（verify）と、それが「ではないもの」
+
+`prohairesis verify` は、リポジトリが既に宣言しているもの —— 集約 quality スクリプト、`Makefile` の検査 target、あるいは `package.json`・`Cargo.toml`・`go.mod` が宣言するもの —— を発見して実行し、その出力を1つの文書に正規化します。位置付きの finding、スコア、そして **fingerprint**（実行を跨いで *この* 失敗を安定して同定する識別子）です。これにより「同じ失敗が3回」が数えられる対象になります。
+
+独自の検査は一切発明しませんし、ゲートでもありません。何も拒否せず、exit code が報告するのは、本プロジェクトが選んだ閾値ではなく、あなたのツールが言ったことです。インストールされていないツールは失敗ではなく skip です。
+
+読んでいないリポジトリで実行する前に知っておくべき点が1つあります: このコマンドは、そのリポジトリが宣言した検査コマンドを、あなたの権限で実行します。実行しうる target 名は閉じており `deploy` はそこに含まれませんが、それでもあなたが読んでいないコードです。この点は [`ENFORCEMENT-HONESTY.ja.md`](ENFORCEMENT-HONESTY.ja.md) に明記してあります。結果の保存コピーが失敗の「同一性」を保持し「本文」を保持しない理由は [`0004-what-the-verify-record-keeps.ja.md`](0004-what-the-verify-record-keeps.ja.md)（または [`0004-what-the-verify-record-keeps.md`](../adr/0004-what-the-verify-record-keeps.md)）にあります。
 
 ## 最も重要な不変条件（Invariant）
 

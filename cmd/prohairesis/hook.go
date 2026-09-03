@@ -7,7 +7,9 @@ import (
 
 	"github.com/Sh1n1230/prohairesis/internal/adapter/claudecode"
 	"github.com/Sh1n1230/prohairesis/internal/event"
+	"github.com/Sh1n1230/prohairesis/internal/notice"
 	"github.com/Sh1n1230/prohairesis/internal/session"
+	"github.com/Sh1n1230/prohairesis/internal/verify"
 )
 
 // cmdHook is what an agent runtime calls on every tool call and at both ends of
@@ -36,6 +38,7 @@ func cmdHook(args []string) int {
 	switch args[0] {
 	case "session-start":
 		observe(dir, h, event.SessionStart, started)
+		announce(dir)
 	case "post-tool":
 		observe(dir, h, event.Tool, started)
 	case "session-end":
@@ -136,6 +139,30 @@ func endSession(dir string, h claudecode.Hook, started time.Time) {
 	}
 	if _, err := session.EndIfOwned(s.ID); err != nil {
 		event.RecordLoss(s.ID, "events", err)
+	}
+}
+
+// announce is the whole of what this project injects into an agent's context.
+//
+// One line, under a budget the code enforces, naming two commands. It is the
+// answer to a real gap and not a foothold for more: everything the meta-state
+// layer will hold is pulled by an agent that asks for it, because a layer that
+// pushes state into the context window is charging for its own existence out of
+// the budget the agent needs for the work.
+//
+// It runs after the observation, not before, so that a failure to record cannot
+// be hidden behind a successful announcement.
+func announce(dir string) {
+	root := ""
+	if repo, err := session.DescribeRepo(dir); err == nil {
+		root = repo.Root
+	}
+	// Only mention verify where there is something to verify. Pointing an agent
+	// at a command that will answer "nothing is declared here" spends context to
+	// buy a wasted tool call.
+	line := notice.SessionStart(root != "" && len(verify.Discover(root)) > 0)
+	if out := claudecode.SessionStartContext(line); out != nil {
+		_, _ = os.Stdout.Write(out)
 	}
 }
 

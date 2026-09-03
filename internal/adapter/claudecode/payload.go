@@ -140,7 +140,7 @@ func (h Hook) Action(repoRoot, home string) *event.Action {
 		if p == "" {
 			continue
 		}
-		a.Paths = append(a.Paths, NormalizePath(p, repoRoot, home))
+		a.Paths = append(a.Paths, pathx.Relative(p, repoRoot, home))
 	}
 	if c := strings.TrimSpace(in.Command); c != "" {
 		a.Command = firstWord(c)
@@ -174,41 +174,6 @@ func (h Hook) Outcome() *event.Outcome {
 		status = "error"
 	}
 	return &event.Outcome{Status: status}
-}
-
-// NormalizePath writes a path the way the log should hold it: relative to the
-// repository when it is inside one, and otherwise absolute with the home
-// directory written as ~.
-//
-// Both halves matter. Relative paths are what "did the agent go back over ground
-// it already covered" is asked in, and they survive the repository being moved.
-// A path outside the repository is the single most important thing an observer
-// can be told, so it is kept in full rather than collapsed into a marker -- with
-// the home directory abbreviated, so that a log stays something its owner can
-// paste into an issue.
-func NormalizePath(p, repoRoot, home string) string {
-	abs := p
-	if !filepath.IsAbs(abs) && repoRoot != "" {
-		abs = filepath.Join(repoRoot, p)
-	}
-	abs = filepath.Clean(abs)
-
-	// Both sides are resolved before comparing: the runtime and git can name the
-	// same file through different symbolic links, and a raw comparison would
-	// report a file inside the repository as being outside it.
-	if repoRoot != "" {
-		if rel, err := filepath.Rel(pathx.Resolve(repoRoot), pathx.Resolve(abs)); err == nil &&
-			!strings.HasPrefix(rel, "..") {
-			return rel
-		}
-	}
-	if home != "" {
-		if rel, err := filepath.Rel(pathx.Resolve(home), pathx.Resolve(abs)); err == nil &&
-			!strings.HasPrefix(rel, "..") {
-			return filepath.Join("~", rel)
-		}
-	}
-	return abs
 }
 
 func firstWord(s string) string {

@@ -210,14 +210,25 @@ func Pending() []Indicator {
 			Unavailable: "nothing here refuses anything yet; there is no decision to be wrong",
 		},
 		{
-			Name:        "context_tax",
-			Direction:   "down",
-			Unavailable: "nothing is injected into the agent's context yet",
+			Name:      "context_tax",
+			Direction: "down",
+			// The numerator is now known exactly -- one line at session start,
+			// held under a byte ceiling by the code that writes it. What is
+			// missing is the denominator: this program does not see the token
+			// counts of a session, and dividing by an estimate would produce a
+			// ratio whose error nobody could bound.
+			Unavailable: "the injected line is bounded and known (" +
+				"under 200 bytes, once per session), but the session's own token " +
+				"count is not visible from here, so the ratio has no denominator",
 		},
 		{
-			Name:        "resignation_rate",
-			Direction:   "down",
-			Unavailable: "needs the verification contract to tell giving up from finishing",
+			Name:      "resignation_rate",
+			Direction: "down",
+			// The verification contract now exists. What is missing is the other
+			// half of the definition -- a reasoned rejection is what separates
+			// giving up from concluding -- and sessions that used either.
+			Unavailable: "the verification contract exists now, but the reasoned " +
+				"rejection that separates giving up from concluding does not",
 		},
 		{
 			Name:        "strategy_revision_rate",

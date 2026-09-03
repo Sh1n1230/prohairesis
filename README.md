@@ -67,11 +67,15 @@ Nothing registered there can refuse a tool call. Every hook exits 0, on every
 path, including the ones where it fails — asserted in
 `tests/scenarios/p2-hook-never-blocks.sh`, not merely intended.
 
-**Not built yet.** The verification contract, the meta-state layer, the policy
-compiler, and the machine ceiling. Those are later phases, in that order.
+Also working: **`prohairesis verify`**, which runs the checks your repository
+already declares and reports them in one shape whichever tool produced them.
 
-So: at this stage prohairesis keeps your work recoverable and keeps a record of
-what happened. It does not decide anything, and it cannot stop anything.
+**Not built yet.** The meta-state layer, the policy compiler, and the machine
+ceiling. Those are later phases, in that order.
+
+So: at this stage prohairesis keeps your work recoverable, keeps a record of what
+happened, and can tell an agent whether the repository's own checks pass. It does
+not decide anything, and it cannot stop anything.
 
 ## Why reversibility first
 
@@ -96,6 +100,9 @@ prohairesis undo --dry-run     # what a restore would do
 prohairesis undo               # put the tree back
 prohairesis session end
 
+prohairesis verify             # run the checks this repository declares
+prohairesis verify --json      # the same, in the shape an agent reads
+
 prohairesis report             # what happened in one session
 prohairesis metrics            # friction now, against the baseline before this
 ```
@@ -105,6 +112,27 @@ not a reason to drop the point you wanted to be able to return to. A session the
 hook opened for itself closes when the last agent using it goes away.
 
 Exit codes are uniform everywhere: `0` clean, `1` gate failed, `2` error.
+
+## Verification, and what it is not
+
+`prohairesis verify` discovers what your repository already declared — an
+aggregate quality script, a `Makefile`'s checking targets, or the scripts in a
+`package.json`, `Cargo.toml` or `go.mod` — runs them, and normalizes what they
+said into one document: findings with a location, a score, and a **fingerprint**
+that identifies *this* failure stably across runs, so that "the same failure
+three times" becomes a thing you can count.
+
+It invents no checks of its own, and it is not a gate. It refuses nothing, and
+its exit code reports what your tools said rather than a threshold this project
+picked. A tool that is not installed is a skip, not a failure.
+
+The one thing to know before running it in a repository you have not read: it
+executes that repository's declared check commands, with your privileges. The set
+of target names it will run is closed and a `deploy` target is never among them —
+but it is code you have not read.
+[`docs/ENFORCEMENT-HONESTY.md`](docs/ENFORCEMENT-HONESTY.md) says so plainly, and
+[`docs/adr/0004-what-the-verify-record-keeps.md`](docs/adr/0004-what-the-verify-record-keeps.md)
+records why the stored copy of a result keeps a failure's identity but not its text.
 
 ## The invariant that matters
 

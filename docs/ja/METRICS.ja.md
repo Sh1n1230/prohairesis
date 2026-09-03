@@ -96,8 +96,8 @@ p50 58ms・p99 62ms。
 | 指標 | 何を待っているか |
 |---|---|
 | `false_block_rate` | P5。まだ何も拒否しないので、誤りうる決定が存在しない |
-| `context_tax` | P3/P4。agent の context にまだ何も注入していない |
-| `resignation_rate` | P3。「諦めた」と「正しく不可能と結論した」の区別には verification contract が要る |
+| `context_tax` | P4。いまは注入している —— session 開始時の 1 行のみで、それを書くコード自身が 200 バイト上限を強制しており、実測 162 バイト。したがって分子は正確に判っている。分母が無い。このプログラムから session の token 数は見えず、推定値で割れば誤差を誰も評価できない比になる |
+| `resignation_rate` | P4b。verification contract は実装されたので「green に到達したか」は答えられる。もう半分が無い —— 諦めと結論を分けるのは、理由と根拠を伴う棄却であり、それは declared state である |
 | `strategy_revision_rate` | P4。存在しない層の効果を測る指標である |
 | `rediscovery_cost` | P4。再探索を知るには、既に探索済みの記録が要る |
 
