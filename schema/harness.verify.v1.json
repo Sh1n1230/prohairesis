@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Sh1n1230/prohairesis/schema/harness.verify.v1.json",
+  "title": "harness.verify.v1",
+  "description": "One verification run: what the repository's own checks said, in one shape whichever tool said it. This layer holds no definition of correctness and no gate. Every check it runs was declared by the repository; the score and rank are a summary of findings, never a threshold this program applies to anything.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ts", "total_score", "rank", "categories"],
+  "properties": {
+    "schema": { "const": "harness.verify.v1" },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC, RFC3339 with milliseconds."
+    },
+    "total_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "100 minus each category's deduction, floored at 0. A run in which every category was skipped scores 100 and means nothing; read `skipped` before reading this."
+    },
+    "rank": {
+      "enum": ["A", "B", "C", "D"],
+      "description": "A >= 90, B >= 70, C >= 50, else D. The same ladder ~/security-checker prints, so that one normalization serves both sources."
+    },
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Identity of this failure, hashed from the normalized findings rather than from raw output, so that the same failure twice is one fingerprint. Absent when nothing was found: green has no fingerprint. Approximate by construction -- scrubbing can merge two failures that differ only in a number, so a count built on this is evidence and never grounds for acting automatically."
+    },
+    "redacted": {
+      "type": "boolean",
+      "description": "Set on the copy kept in a session directory, where finding messages are dropped. Tool output is arbitrary program output and a stored copy would become a place for secrets to collect -- the same decision ADR 0002 made for command lines. The fingerprint in a redacted record therefore cannot be recomputed from that record: it is an identity, not a digest of what sits next to it."
+    },
+    "session_id": {
+      "type": "string",
+      "description": "The session this run belongs to. Absent when the run happened outside one, which is allowed: reading whether a repository passes needs no session."
+    },
+    "checkpoint_seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The checkpoint whose tree this run judged."
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "skipped", "counts", "findings", "deduction"],
+        "properties": {
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable across runs: recurrence detection keys on it."
+          },
+          "source": {
+            "type": "string",
+            "description": "The repository-relative file that declared this check. Without it a reader cannot argue with what was discovered."
+          },
+          "skipped": {
+            "type": "boolean",
+            "description": "The check did not run -- the tool is absent, or it did not finish. Never scored as a pass: a machine without mypy is not a project that type checks."
+          },
+          "skipped_reason": { "type": "string" },
+          "counts": {
+            "type": "object",
+            "additionalProperties": { "type": "integer", "minimum": 0 },
+            "description": "Findings by severity."
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["severity"],
+              "properties": {
+                "severity": {
+                  "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+                  "description": "prohairesis itself only emits HIGH: it knows a declared check did not pass and does not know how bad that is. The rest of the ladder exists for sources that do grade their own findings and write into this same shape."
+                },
+                "message": {
+                  "type": "string",
+                  "description": "Normalized: absolute paths, timestamps, process ids, durations and temporary directories are erased, because those are what make one failure look like a new one. Absent from a redacted record."
+                },
+                "location": {
+                  "type": "string",
+                  "description": "Repository-relative, in the same form the event log writes paths."
+                }
+              }
+            }
+          },
+          "deduction": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40,
+            "description": "CRITICAL 20 / HIGH 10 / MEDIUM 3 / LOW 1, capped at 40 per category so that a noisy linter cannot drown out a failing test suite."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Findings were dropped to keep the document readable. The deduction is computed from what was kept, which for a category already at the cap changes nothing."
+          }
+        }
+      }
+    }
+  }
+}

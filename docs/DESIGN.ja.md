@@ -3,11 +3,15 @@
 > 承認済みの判断が後の検証で覆った箇所には、それを置き換えた ADR へのリンクを併記しています。
 > 設計判断を変更する場合は、この文書を黙って書き換えるのではなく `docs/adr/` に ADR を追加してください。
 >
-> **実装進捗**: P0（baseline 計測・正直さの文書化）、P1（可逆性基盤）、P2（観測 + 計測）は完了。P3 以降は未着手。
+> **実装進捗**: P0（baseline 計測・正直さの文書化）、P1（可逆性基盤）、P2（観測 + 計測）、
+> P3（検証契約）、および第二の軸の A0（説明コストの測定）は完了。P4a 以降は未着手。
 > P2 の実装で本文の記述を 4 点上書きしています（`argv` の削除 / 時間予算の撤回 /
 > `boundary_class`・`decision` の v1 除外 / hook 登録の scope）。理由は
 > [ADR 0002](adr/0002-what-the-event-log-keeps.md)（[日本語版](ja/0002-what-the-event-log-keeps.ja.md)）にあり、
 > 以下の該当箇所はそれに合わせて更新済みです。
+> P3 の実装でさらに 6 点（発見の ladder / 実行可能 target の閉じた一覧 / severity 単一化 /
+> 保存記録からの finding 本文の削除 / 読み手より先に記録を書くこと / 注入予算のコードによる強制）。理由は
+> [ADR 0004](adr/0004-what-the-verify-record-keeps.md)（[日本語版](ja/0004-what-the-verify-record-keeps.ja.md)）。
 > **製品名**: 本文中の「harness」は原則として*カテゴリを指す普通名詞*です。実装の名前は **prohairesis**、
 > 状態ディレクトリは `~/.prohairesis`、スキーマ名前空間は移植可能な契約として `harness.*` を維持します。
 
@@ -515,7 +519,8 @@ prohairesis/
     session/       # lifecycle, lineage(parent_session/task_id)
     checkpoint/    # repo 外 object store + APFS clonefile snapshot  ← 全体の土台
     event/         # JSONL sink, schema 検証
-    verify/        # 発見 + 正規化 + failure fingerprint
+    verify/        # 発見(ladder) + 正規化 + failure fingerprint + 記録
+    notice/        # Agent の context に入れてよい唯一の文字列と、その予算
     state/         # L7: derived(attempt/recurrence/topology) + declared(self-state)
     topology/      # 観測ベースの environment 導出（能動 scan 禁止）
     policy/        # parse, intersect, compile, explain
@@ -596,7 +601,20 @@ exit code は security-checker から直接踏襲: `0`=clean / `1`=gate failed /
   常に空のフィールドは「埋めよ」という招待状として働く。schema はバージョン付きなので v2 で足せばよい。
   `kind` は `read|write|delete|exec|network|agent_config|opaque`。**`opaque` は正式な答え**であり、
   写像できない tool を `exec` に丸めることは coverage の錯覚を作る。
-- **`harness.verify.v1`** — **security-checker の正規化出力と同一形状**: `{category, skipped, findings:[{severity,message,location}]}` → `{total_score, rank, categories[]}`。`~/security-checker/lib/score.sh` が改修ゼロで verification カテゴリになり、Agent が覚える出力形状は1つで済む。**failure fingerprint もこの正規化形状から作る**（生 stderr からではない）。
+- **`harness.verify.v1`** — **security-checker の正規化出力と同一形状**: `{category, skipped, findings:[{severity,message,location}]}` → `{total_score, rank, categories[]}`。減点表（CRITICAL 20 / HIGH 10 / MEDIUM 3 / LOW 1、カテゴリ上限 40）も同一なので、Agent が覚える出力形状は1つで済む。**failure fingerprint もこの正規化形状から作る**（生 stderr からではない）。
+  実体は `schema/harness.verify.v1.json`。当初案から 3 点変更（[ADR 0004](adr/0004-what-the-verify-record-keeps.md)）:
+  **(1) prohairesis 自身が出す severity は `HIGH` の 1 種類のみ** —— この層が知っているのは
+  「repository が検査を宣言した」「その検査が通らなかった」だけで、未使用 import が失敗する
+  テストより悪いかは知らない。写像を発明すればそれは L6 が*正しさの定義を持つ*ことになる。
+  階梯自体は残す（自分で格付けする供給元が同じ形状に書き込むため）。
+  **(2) session 内に保存する複製は finding の `message` を落とし `redacted: true` を立てる** ——
+  ツール出力は任意のプログラム出力であり、実際 `~/signate/_template` の初回実行が返した message は
+  secret scanner が拾ったソース行そのものだった。ADR 0002 が `argv` に下した判断と同一。
+  帰結として**保存記録の fingerprint はその記録から再計算できない**（同一性であって digest ではない）。
+  **(3) score/rank に閾値の意味を持たせない** —— exit code の根拠は `Failed()`（finding が 1 件でもあるか）。
+  score は端末を読む人間向けの要約であり、rank A と失敗した実行は同時に成立する。
+  なお **`~/security-checker/lib/score.sh` を import はしない**（private repo に依存できないため）。
+  同じ算術を再実装し、公開されている減点表に対して `internal/verify/score_test.go` で照合している。
 - **`harness.state.v1`** — `{derived:{attempts[], elapsed, last_green, recurrence[]}, declared:{goal, current_hypothesis, confidence, rejected[{hypothesis,reason,evidence,at}], known_unknowns[], next_experiment}, lineage:{parent_session, task_id}}`。**`derived` は Agent から書き込み不可（B4）。**
 - **`harness.topology.v1`** — `{repos[], branches[], dirs_touched[], processes[], ports[], deps[], endpoints[], changed_resources[]}`。すべて観測由来。読むたび再計算。
 - **`harness.policy.v1`** — narrowing 専用語彙。**repo scope に `allow` 動詞が構造的に存在しない。**
@@ -637,7 +655,7 @@ $ ./install
 | **P0** ✅**完了** | 既存 transcript から friction baseline 取得（`recurrence_rate`/`resignation_rate` の近似も含む）。**`ENFORCEMENT-HONESTY.md` を enforcement コードより先に書く** | `~/.prohairesis/metrics/baseline.json` に §9 の指標が実データで入る |
 | **P1** 可逆性 ✅**完了** | repo 外 object store の checkpoint、`protect` パスの clonefile snapshot、`undo`/`diff`。**policy も hook も deny も無し** | scenario test: `rm -rf src && git clean -xdf && echo garbage > pyproject.toml` → `undo` → tracked/untracked/precious が **byte 一致**。加えて `git log`/`status`/`stash list`/reflog が control repo と **byte 一致**。**この時点で FS 操作の prompt を切ってよい。これだけで本プロジェクトは正当化される** |
 | **P2** 観測 + 計測 ✅**完了** | SessionStart/End/PostToolUse shim（全て record-only・`\|\| true`・絶対に block しない）、JSONL sink、`report`/`metrics`、hook 登録コマンド、attach-or-create と自動 checkpoint | 実 session が valid な `events.jsonl` を生む。**時間予算は設けない**（当初の「p50 < 20ms」は導出が存在しなかったため撤回。実測 p50 23ms / checkpoint 込み 58ms を記録するのみ。ADR 0002・`docs/METRICS.md`）。加えて scenario test: state ディレクトリを削除・書込不可・ファイル置換し、ゴミと 200KB payload を渡し、repo 外で走らせても **hook は exit 0**。失われた観測は session ディレクトリと失敗要因を共有しない durable な経路に記録される |
-| **P3** verification | 発見（`run_quality_checks.sh`/Makefile/package.json/cargo）→ 正規化、`harness verify`、**failure fingerprint**、有界な context 注入（ポインタ1行のみ） | `~/signate/_template` で `verify --json` が正規化 JSON を返す。注入 context < 50 token。transcript 上で Agent が自発的に `verify` を呼び finding に対処 |
+| **P3** verification ✅**完了** | 発見（`run_quality_checks.sh`/Makefile/package.json/cargo/**go.mod**）→ 正規化、`prohairesis verify`、**failure fingerprint**、有界な context 注入（ポインタ1行のみ）。発見は union ではなく **ladder**、実行可能 target は**閉じた一覧**（`deploy` は発見されない）。[ADR 0004](adr/0004-what-the-verify-record-keeps.md) | `~/signate/_template` で `verify --json` が正規化 JSON を返すこと**を実測で確認**（`quality` カテゴリ / finding 4 件 / score 60・rank C）。注入 context は **162 バイト**（設計の 50 token を tokenizer 無しで数えられる単位に直した 200 バイト上限を、生成関数自身が強制）。scenario test: 時刻と pid を含む実出力を通して同じ失敗が同じ fingerprint を保ち、違う失敗は違う fingerprint になり、ツール不在は skip かつ exit 0、repository のファイルと git 表層は不変。**残る未検証**: 「transcript 上で Agent が自発的に `verify` を呼ぶ」は実運用の観察を要するため P4a と併せて測る |
 | **P4a** L7 derived | attempt 導出・elapsed・`last_green`・**recurrence 検出と structured signal**・topology（観測のみ）・`state show`/`timeline`・**signal 抑制フラグ（A/B 対照用）** | 3回同一失敗する仕込み repo で `recurrence` signal が count=3・`last_green` 付きで発火する。**Agent 側の協力ゼロで成立すること**（`hypothesis` を一度も呼ばない session でも全部動く）。signal に戦略文言が1つも含まれないことを golden test で固定。**paired-session A/B（signal 抑制あり/なし）で `strategy_revision_rate` の差を測定できること** —— 差が出なければ L7 の signal 部分は効いておらず、再設計対象 |
 | **P4b** L7 declared | `hypothesis set/reject`・`goal`・session lineage と carry-over | 新 session 開始時に前 session の `rejected` が carry-over 候補として提示され、**自動 merge されない**。`reject` が `reason` と `evidence` 無しでは記録を拒否する |
 | **P5** policy + 天井 + credential | B0–B6 分類表、`policy compile` → settings.json ブロック + managed-settings.json + sandbox。`block-secrets.sh` 退役、`Run()` 修正、`doctor` | golden test。交わり性の証明（広げる repo policy が理由付きで drop）。`Bash(curl:*)` を allow する red-team fixture repo が `trust` まで無効。**かつ `metrics` が P4 比で `interrupts_per_session` を増やしていないこと。増えていたら出荷しない** |
@@ -653,7 +671,7 @@ $ ./install
 |---|---|---|---|
 | **A0** 説明コストの測定 ✅**完了** | `explanation_cost` と `median_explanation_cost` を既存 transcript から算出し baseline に加えた。再説明の側は `restated_context_rate` として `Pending()` に据え置き | 71 session の実データで mean 6,166 / median 1,036 rune。**分布は歪んでおり**（1 session が総量の 1/3）、mean 単独では読めないことが測定で判明したため median を対で出す | なし |
 | **A1** L7 追補 | `estimate`（declared）と `stale_read` signal（derived） | `estimate_ratio` が verify-green を分母として算出される。仕込み repo で並行変更が `stale_read` を発火させ、**`changed_by` が `unattributed` を超えて主張しない**。signal に戦略文言が無いことを golden test で固定 | **P3**（完了定義）・P4a（attempt 境界） |
-| **A2** 説明可能性の記録 | `ACCOUNTABILITY-HONESTY.md` を**先に**執筆 → ADR 0004 → 記録の住所と読者の分離 → gateway | 文書がコードより先に存在する。ADR 0002 の保証が弱められていないか、弱めたなら明記されている。**`interrupts_per_session` が A1 比で増えていないこと（承認要求への転落の検出）。増えていたら出荷しない** | P3・A1 |
+| **A2** 説明可能性の記録 | `ACCOUNTABILITY-HONESTY.md` を**先に**執筆 → ADR（採番は執筆時点の次番号。0004 は P3 が使用済み）→ 記録の住所と読者の分離 → gateway | 文書がコードより先に存在する。ADR 0002 の保証が弱められていないか、弱めたなら明記されている。**`interrupts_per_session` が A1 比で増えていないこと（承認要求への転落の検出）。増えていたら出荷しない** | P3・A1 |
 | **A3** surrogate 変換パス | 開発工程の不可逆点（レビュー・CI/CD・デプロイ）を可逆な surrogate に変換する設計 | 工程ごとに「harness が代行していないこと」が言えること。§12 反論3 の宿題への回答 | A2 |
 
 ---

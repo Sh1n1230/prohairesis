@@ -132,7 +132,9 @@ hold. That list is the specific form; this is the general one.
 - **KISS.** In the environment, this means the surface an agent has to know about
   stays small. Every command an agent must learn is a tax on the context window
   and a thing that can be misunderstood. P2 adds none: `report`, `metrics` and
-  `hooks` are for people.
+  `hooks` are for people. P3 adds exactly one, `verify`, and one output shape for
+  every tool it runs — and the line that tells an agent the command exists is
+  held under a byte budget by the code that writes it, not by intention.
 - **DRY.** One fact, one home. `meta.json` is the record of what a checkpoint is;
   the event log points at it and does not restate it. The boundary between
   "before this project was watching" and "since" is derived from the earliest

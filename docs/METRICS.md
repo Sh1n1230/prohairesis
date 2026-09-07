@@ -111,8 +111,8 @@ easy.
 | figure | waiting on |
 |---|---|
 | `false_block_rate` | P5. Nothing refuses anything yet, so there is no decision available to be wrong. |
-| `context_tax` | P3/P4. Nothing is injected into the agent's context yet. |
-| `resignation_rate` | P3. Telling "gave up" from "correctly concluded it was impossible" needs the verification contract. |
+| `context_tax` | P4. Something is injected now — one line at session start, held under 200 bytes by the code that writes it, measured at 162. The numerator is therefore known exactly; the denominator is not, because this program cannot see a session's token count, and dividing by an estimate would produce a ratio whose error nobody could bound. |
+| `resignation_rate` | P4b. The verification contract exists now, so "reached green" is answerable. The other half is not: what separates giving up from concluding is a rejection with a reason and evidence behind it, and that is declared state. |
 | `strategy_revision_rate` | P4. It measures the effect of the layer that does not exist. |
 | `rediscovery_cost` | P4. Knowing something was re-explored needs a record of what had already been explored. |
 | `restated_context_rate` | Unscheduled. Repeats of normalized text are dominated by short affirmations, and a person explaining the same fact twice rarely uses the same words. Separating a restatement from a fresh instruction needs inference this layer must not do, so the half of `explanation_cost` that counts re-explanation is not shipped rather than shipped wrong. |

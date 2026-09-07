@@ -90,6 +90,31 @@ Simultaneously too tight and too loose is the *characteristic* failure of string
 policy, not an implementation defect to be tuned away. It is retained here as a permanent
 regression corpus, not as something to fix.
 
+## Verification is a report, never a gate
+
+`prohairesis verify` runs the checks a repository already declared and normalizes what
+they said. It has no verdict of its own. It refuses nothing, blocks nothing, and holds no
+threshold: its exit code is `1` when any declared check produced a finding, and that is a
+statement about your tools' output, not a permission this project granted or withheld.
+
+Two things follow, and both are limitations rather than features.
+
+**It runs commands out of the repository.** Discovery reads `scripts/run_quality_checks.sh`,
+a `Makefile`, `package.json`, `Cargo.toml` and `go.mod`, and executes the conventional
+checking targets it finds there — with your privileges, in your working tree. In a
+repository you have not read, `prohairesis verify` runs code you have not read. This grants
+an *agent* nothing it did not already have, since an agent has a shell; it is a real
+consideration for a human typing the command in a fresh clone. The set of target names it
+will run is closed (`check`, `verify`, `lint`, `typecheck`, `test`) and extending it
+requires an ADR, so a `deploy` target is never discovered. That bounds the blast radius. It
+does not eliminate it, and there is no trust check in front of it until P5.
+
+**Its findings are approximate.** The fingerprint that identifies a failure is computed
+after erasing timestamps, process ids, durations, temporary paths and hex identifiers,
+because those are what make one failure look like a new one. That erasure can merge two
+failures that differ only in a number. Any count built on it is evidence for a human or an
+agent to weigh, and nothing in this project may act on one automatically.
+
 ## What is not enforced at all
 
 - Exfiltration through an **allowlisted** destination. An agent may push a secret to a
@@ -99,6 +124,8 @@ regression corpus, not as something to fix.
 - Effects on any other machine.
 - Effects that already left the machine: a sent message, a published package, an executed
   payment, a deleted remote resource. `prohairesis undo` restores a tree. It does not un-send.
+- Anything a repository's own declared checks do when `prohairesis verify` runs them. There
+  is no sandbox in front of them yet.
 
 ## Where real enforcement comes from
 
